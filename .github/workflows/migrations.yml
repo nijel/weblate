@@ -24,7 +24,7 @@ jobs:
       DJANGO_SETTINGS_MODULE: weblate.settings_test
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2.4.0
       - name: Start services
         run: ./ci/services-up ${{ matrix.database }}
       - name: Cache pip
