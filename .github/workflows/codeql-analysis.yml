@@ -46,13 +46,13 @@ jobs:
       run: ./ci/pip-install ${{ matrix.requirements }}
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v2.1.28
       with:
         languages: ${{ matrix.language }}
         setup-python-dependencies: false
 
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v2
+      uses: github/codeql-action/autobuild@v2.1.28
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v2.1.28
