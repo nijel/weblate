@@ -21,7 +21,7 @@ jobs:
       PYTHONWARNINGS: default,ignore:unclosed:ResourceWarning
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3.2.0
     - name: Install apt dependencies
       run: sudo ./ci/apt-install
     - name: Set up Python
@@ -55,7 +55,7 @@ jobs:
       PYTHONWARNINGS: default,ignore:unclosed:ResourceWarning
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3.2.0
     - name: Install apt dependencies
       run: sudo ./ci/apt-install
     - name: Set up Python
@@ -80,7 +80,7 @@ jobs:
       PYTHONWARNINGS: default,ignore:unclosed:ResourceWarning
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3.2.0
     - name: Install apt dependencies
       run: sudo ./ci/apt-install
     - name: Setup Python
