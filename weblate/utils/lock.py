@@ -64,7 +64,6 @@ class WeblateLock:
         self._origin = origin
         self._using_redis = is_redis_cache()
         self._local = threading.local()
-        self._local.depth = 0
         if self._using_redis:
             # Prefer Redis locking as it works distributed
             self._name = self._format_template(cache_template)
@@ -98,6 +97,16 @@ class WeblateLock:
             slug=self._slug,
         )
 
+    def _get_depth(self) -> int:
+        """Get the current lock depth for this thread, initializing if needed."""
+        if not hasattr(self._local, "depth"):
+            self._local.depth = 0
+        return self._local.depth
+
+    def _set_depth(self, value: int) -> None:
+        """Set the current lock depth for this thread."""
+        self._local.depth = value
+
     def get_error_message(self) -> str:
         if self.origin:
             return f"Lock on {self.origin} ({self.scope}) could not be acquired in {self._timeout}s"
@@ -116,16 +125,19 @@ class WeblateLock:
 
     def _enter_file(self) -> None:
         # Fall back to file based locking
-        try:
-            self._file_lock.acquire()
-        except Timeout as error:
-            raise WeblateLockTimeoutError(
-                self.get_error_message(), lock=self
-            ) from error
+        # Only acquire the underlying file lock if not already held
+        # File locks are not reentrant, so we handle reentrancy via depth counter
+        if self._get_depth() == 0:
+            try:
+                self._file_lock.acquire()
+            except Timeout as error:
+                raise WeblateLockTimeoutError(
+                    self.get_error_message(), lock=self
+                ) from error
 
     def add_breadcrumb(self, operation: str) -> None:
         add_breadcrumb(
-            category="lock", message=f"{operation} {self._name} ({self._local.depth})"
+            category="lock", message=f"{operation} {self._name} ({self._get_depth()})"
         )
 
     def __enter__(self) -> None:
@@ -137,7 +149,7 @@ class WeblateLock:
                     self._enter_redis()
                 else:
                     self._enter_file()
-        self._local.depth += 1
+        self._set_depth(self._get_depth() + 1)
 
     def __exit__(
         self,
@@ -150,10 +162,11 @@ class WeblateLock:
             raise WeblateLockNotLockedError(msg, lock=self)
 
         self.add_breadcrumb("exit")
-        self._local.depth -= 1
+        new_depth = self._get_depth() - 1
+        self._set_depth(new_depth)
 
         # Release underlying lock
-        if self._local.depth == 0:
+        if new_depth == 0:
             self.add_breadcrumb("release")
             if self._using_redis:
                 self._redis_lock.release()
@@ -162,4 +175,4 @@ class WeblateLock:
 
     @property
     def is_locked(self) -> bool:
-        return self._local.depth > 0
+        return self._get_depth() > 0
