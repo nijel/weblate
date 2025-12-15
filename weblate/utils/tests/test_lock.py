@@ -192,8 +192,8 @@ class WeblateLockTest(SimpleTestCase):
         def thread1_func():
             try:
                 # Each thread should be able to check if locked
-                # Initially should not be locked
-                initial_state = lock.is_locked
+                # Initially should not be locked in this thread
+                self.assertFalse(lock.is_locked)
                 with lock:
                     # Should be locked in this thread
                     self.assertTrue(lock.is_locked)
@@ -209,8 +209,8 @@ class WeblateLockTest(SimpleTestCase):
                 # Wait a bit to let thread1 acquire the lock first
                 time.sleep(0.05)
                 # Each thread should be able to check if locked
-                # This thread should see its own depth (0)
-                initial_state = lock.is_locked
+                # This thread should see its own depth (0) - not locked from its perspective
+                self.assertFalse(lock.is_locked)
                 # Try to acquire - should succeed once thread1 releases
                 with lock:
                     self.assertTrue(lock.is_locked)
