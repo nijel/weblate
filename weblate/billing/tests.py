@@ -55,7 +55,7 @@ class BillingTest(BaseTestCase):
             name=name, slug=name, access_control=Project.ACCESS_PROTECTED
         )
         self.billing.projects.add(project)
-        project.add_user(self.user, "Billing")
+        self.billing.owners.add(self.user)
         return project
 
     def test_view_billing(self) -> None:
@@ -381,7 +381,7 @@ class BillingTest(BaseTestCase):
         project.delete()
         self.assertEqual(
             set(self.billing.owners.values_list("username", flat=True)),
-            {self.user.username, second_user.username},
+            {self.user.username},
         )
 
     def test_merge(self) -> None:
