@@ -220,7 +220,7 @@ def block_user(request: AuthenticatedHttpRequest, project):
 @require_POST
 @login_required
 def unblock_user(request: AuthenticatedHttpRequest, project):
-    """Block user from a project."""
+    """Unblock user from a project."""
     obj, form = check_user_form(
         request,
         project,
@@ -458,7 +458,7 @@ def create_token(request: AuthenticatedHttpRequest, project):
 @require_POST
 @login_required
 def create_group(request: AuthenticatedHttpRequest, project):
-    """Delete project group."""
+    """Create project group."""
     obj = parse_path(request, [project], (Project,))
 
     if not request.user.has_perm("project.permissions", obj):
