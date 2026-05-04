@@ -7,9 +7,13 @@ Weblate 2026.5
 
 .. rubric:: Improvements
 
+* Using DOS line endings can now be configured using the ``dos_eol`` :ref:`file_format_params`.
+
 .. rubric:: Bug fixes
 
 .. rubric:: Compatibility
+
+* The ``dos-eol`` flag is no longer supported. Use the ``dos_eol`` :ref:`file_format_params` instead.
 
 .. rubric:: Upgrading
 

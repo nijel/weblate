@@ -1681,7 +1681,11 @@ $(function () {
           .find(".file-format-param-field")
           .attr("fileformats")
           ?.split(" ");
-        if (fileFormats.includes(selectedFileFormat)) {
+        if (
+          fileFormats &&
+          (fileFormats.includes(selectedFileFormat) ||
+            fileFormats.includes("*"))
+        ) {
           $(this).show();
           displayFieldLabel = true;
         } else {
