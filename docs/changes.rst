@@ -11,6 +11,8 @@ Weblate 2026.5
 
 .. rubric:: Bug fixes
 
+* Merge request pushes now refresh stale fork remotes after changing repository hosting.
+
 .. rubric:: Compatibility
 
 * The ``dos-eol`` flag is no longer supported. Use the ``dos_eol`` :ref:`file_format_params` instead.
