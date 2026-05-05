@@ -45,6 +45,13 @@ from translate.storage.xml_extract.extract import (
 from weblate.formats.base import TranslationFormat
 from weblate.formats.helpers import NamedBytesIO
 from weblate.formats.ttkit import BasePoUnit, TTKitUnit, XliffUnit
+from weblate.trans.file_format_params import (
+    LineMaxLength,
+    MdExtractCodeBlocks,
+    MdExtractFrontmatter,
+    MdNoPlaceholders,
+    MergeDuplicates,
+)
 from weblate.trans.util import get_string
 from weblate.utils.concurrency import MARKDOWN_LOCK
 from weblate.utils.errors import report_error
@@ -332,7 +339,7 @@ class HTMLFormat[S: pofile, U: pounit, T: ConvertPoUnit](ConvertFormat[S, U, T])
         # Fake input file with a blank filename
         htmlparser = htmlfile(inputfile=NamedBytesIO("", storefile.read()))
         duplicate_style = "msgctxt"
-        if self.file_format_params.get("merge_duplicates"):
+        if MergeDuplicates.get_value(self.file_format_params):
             duplicate_style = "merge"
 
         return self.convert_to_po(
@@ -382,10 +389,20 @@ class MarkdownFormat[S: pofile, U: pounit, T: ConvertPoUnit](ConvertFormat[S, U,
         # https://github.com/miyuchina/mistletoe/issues/210
         with MARKDOWN_LOCK:
             # Fake input file with a blank filename
-            mdparser = MarkdownFile(inputfile=NamedBytesIO("", storefile.read()))
+            mdparser = MarkdownFile(
+                inputfile=NamedBytesIO("", storefile.read()),
+                max_line_length=LineMaxLength.get_value(self.file_format_params),
+                extract_code_blocks=MdExtractCodeBlocks.get_value(
+                    self.file_format_params
+                ),
+                extract_frontmatter=MdExtractFrontmatter.get_value(
+                    self.file_format_params
+                ),
+                no_placeholders=MdNoPlaceholders.get_value(self.file_format_params),
+            )
 
         duplicate_style = "msgctxt"
-        if self.file_format_params.get("merge_duplicates"):
+        if MergeDuplicates.get_value(self.file_format_params):
             duplicate_style = "merge"
 
         return self.convert_to_po(
@@ -407,7 +424,14 @@ class MarkdownFormat[S: pofile, U: pounit, T: ConvertPoUnit](ConvertFormat[S, U,
                 inputstore=self.store,  # type: ignore[arg-type]
                 includefuzzy=True,
                 outputthreshold=None,
-                maxlength=80,
+                maxlength=LineMaxLength.get_value(self.file_format_params),
+                extract_code_blocks=MdExtractCodeBlocks.get_value(
+                    self.file_format_params
+                ),
+                extract_frontmatter=MdExtractFrontmatter.get_value(
+                    self.file_format_params
+                ),
+                no_placeholders=MdNoPlaceholders.get_value(self.file_format_params),
             )
             if self.template_store is None:
                 msg = "Template store is required."
@@ -663,7 +687,7 @@ class PlainTextFormat[S: pofile, U: pounit, T: ConvertPoUnit](ConvertFormat[S, U
         input_store.parse(storefile.readlines())
         input_store.filename = os.path.basename(storefile.name)
         duplicate_style = "msgctxt"
-        if self.file_format_params.get("merge_duplicates"):
+        if MergeDuplicates.get_value(self.file_format_params):
             duplicate_style = "merge"
 
         return self.convert_to_po(
@@ -719,7 +743,7 @@ class AsciiDocFormat[S: pofile, U: pounit, T: ConvertPoUnit](ConvertFormat[S, U,
         adocparser = AsciiDocFile(inputfile=NamedBytesIO("", storefile.read()))
 
         duplicate_style = "msgctxt"
-        if self.file_format_params.get("merge_duplicates"):
+        if MergeDuplicates.get_value(self.file_format_params):
             duplicate_style = "merge"
 
         return self.convert_to_po(

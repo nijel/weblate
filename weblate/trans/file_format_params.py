@@ -39,6 +39,10 @@ class FileFormatParams(TypedDict, total=False):
     json_indent_style: Literal["spaces", "tabs"]
     json_sort_keys: bool
     json_use_compact_separators: bool
+    line_max_length: int
+    md_extract_code_blocks: bool
+    md_extract_frontmatter: bool
+    md_no_placeholders: bool
     merge_duplicates: bool
     po_fuzzy_matching: bool
     po_keep_previous: bool
@@ -52,31 +56,38 @@ class FileFormatParams(TypedDict, total=False):
     yaml_line_wrap: int
 
 
+FileFormatParamKey = Literal[
+    "dos_eol",
+    "json_sort_keys",
+    "json_indent",
+    "json_indent_style",
+    "json_use_compact_separators",
+    "po_line_wrap",
+    "po_keep_previous",
+    "po_no_location",
+    "po_fuzzy_matching",
+    "yaml_indent",
+    "yaml_line_wrap",
+    "yaml_line_break",
+    "xml_closing_tags",
+    "flatxml_root_name",
+    "flatxml_value_name",
+    "flatxml_key_name",
+    "strings_encoding",
+    "properties_encoding",
+    "csv_encoding",
+    "csv_simple_encoding",
+    "gwt_encoding",
+    "merge_duplicates",
+    "line_max_length",
+    "md_extract_code_blocks",
+    "md_extract_frontmatter",
+    "md_no_placeholders",
+]
+
+
 class BaseFileFormatParam:
-    name: Literal[
-        "csv_encoding",
-        "csv_simple_encoding",
-        "dos_eol",
-        "flatxml_key_name",
-        "flatxml_root_name",
-        "flatxml_value_name",
-        "gwt_encoding",
-        "json_indent",
-        "json_indent_style",
-        "json_sort_keys",
-        "json_use_compact_separators",
-        "merge_duplicates",
-        "po_fuzzy_matching",
-        "po_keep_previous",
-        "po_line_wrap",
-        "po_no_location",
-        "properties_encoding",
-        "strings_encoding",
-        "xml_closing_tags",
-        "yaml_indent",
-        "yaml_line_break",
-        "yaml_line_wrap",
-    ]
+    name: FileFormatParamKey
     file_formats: Sequence[str] = []
     field_class: type[forms.Field] = forms.CharField
     label: StrOrPromise = ""
@@ -578,4 +589,53 @@ class DOSLineEndings(BaseFileFormatParam):
     default = False
     help_text = gettext_lazy(
         "Use DOS line endings (\\r\\n) instead of UNIX line endings (\\n)"
+    )
+
+
+@register_file_format_param
+class LineMaxLength(BaseFileFormatParam):
+    name = "line_max_length"
+    file_formats = ("markdown",)
+    label = gettext_lazy("Maximum line length")
+    field_class = forms.IntegerField
+    default = 80
+    field_kwargs: ClassVar[FieldKwargsDict] = {"min_value": 20, "max_value": 1000}
+    help_text = gettext_lazy(
+        "The maximum number of characters for each line in the output file."
+    )
+
+
+@register_file_format_param
+class MdExtractCodeBlocks(BaseFileFormatParam):
+    name = "md_extract_code_blocks"
+    file_formats = ("markdown",)
+    label = gettext_lazy("Extract code blocks")
+    field_class = forms.BooleanField
+    default = True
+    help_text = gettext_lazy(
+        "Whether to extract translatable content from code blocks in Markdown files."
+    )
+
+
+@register_file_format_param
+class MdExtractFrontmatter(BaseFileFormatParam):
+    name = "md_extract_frontmatter"
+    file_formats = ("markdown",)
+    label = gettext_lazy("Extract front matter")
+    field_class = forms.BooleanField
+    default = True
+    help_text = gettext_lazy(
+        "Whether to extract and translate YAML front matter blocks in Markdown files."
+    )
+
+
+@register_file_format_param
+class MdNoPlaceholders(BaseFileFormatParam):
+    name = "md_no_placeholders"
+    file_formats = ("markdown",)
+    label = gettext_lazy("Disable placeholders")
+    field_class = forms.BooleanField
+    default = False
+    help_text = gettext_lazy(
+        "Disables detection and processing of placeholders in Markdown files."
     )
