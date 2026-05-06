@@ -7,6 +7,7 @@ Weblate 2026.5
 
 * Added :ref:`file_format_params` for :ref:`markdown`, including ``line_max_length``, ``md_extract_code_blocks``, ``md_extract_frontmatter``, and ``md_no_placeholders``.
 * :ref:`CSV <csv>` and :ref:`XLSX <xlsx>` downloads in :ref:`download` now export plural strings as separate plural-form rows that can be imported back.
+* :ref:`file_format_params` now include ``po_set_language_team``, ``po_set_last_translator``, ``po_set_x_generator``, and ``po_report_msgid_bugs_to`` to control whether Weblate updates the ``Language-Team``, ``Last-Translator``, ``X-Generator``, and ``Report-Msgid-Bugs-To`` headers in Gettext PO and POT files.
 
 .. rubric:: Improvements
 
@@ -23,6 +24,7 @@ Weblate 2026.5
 
 * The ``dos-eol`` flag is no longer supported. Use the ``dos_eol`` :ref:`file_format_params` instead.
 * The registration CAPTCHA now uses the ALTCHA widget v3 protocol with Argon2id proof-of-work.
+* The ``set_language_team`` project attribute has been replaced with the ``po_set_language_team`` file format parameter at the component level; see :ref:`file_format_params`.
 
 .. rubric:: Upgrading
 
