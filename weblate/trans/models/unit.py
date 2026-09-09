@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import operator
 import re
+from copy import deepcopy
 from functools import partial, reduce
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
@@ -94,6 +95,9 @@ COMPONENT_ORDER_FIELDS = [
     "translation__component__name",
 ]
 UNIT_METADATA_UPDATE_FIELDS = (
+    "details",
+    "source",
+    "target",
     "location",
     "note",
     "position",
@@ -613,6 +617,7 @@ class UnitQuerySet(models.QuerySet["Unit", "Unit"]):
 
 
 class OldUnit(TypedDict):
+    tbx_terms: dict | None
     state: StringState
     source: str
     target: str
@@ -623,6 +628,7 @@ class OldUnit(TypedDict):
 
 
 class UnitAttributesDict(TypedDict):
+    tbx_terms: dict | None
     location: str
     explanation: str
     source_explanation: str
@@ -791,6 +797,10 @@ class Unit(models.Model, LoggerMixin):
         self.plural_map: list[str] = []
         # Data for glossary integration
         self.glossary_terms: list[Unit] | None = None
+        self.matched_sources: tuple[str, ...] | None = None
+        self.glossary_notes: dict[str, list[str]] = {}
+        self.glossary_sources: list[dict[str, Any]] = []
+        self.glossary_targets: list[dict[str, Any]] = []
         self.glossary_positions: tuple[tuple[int, int], ...] = ()
         # Project backup integration
         self.import_data: dict[str, Any] = {}
@@ -943,6 +953,7 @@ class Unit(models.Model, LoggerMixin):
             "source": unit.source,
             "target": unit.target,
             "context": unit.context,
+            "tbx_terms": deepcopy(unit.details.get("tbx_terms")),
             "extra_flags": unit.extra_flags,
             "explanation": unit.explanation,
             "automatically_translated": unit.automatically_translated,
@@ -955,8 +966,10 @@ class Unit(models.Model, LoggerMixin):
         state: int,
         explanation: str,
         automatically_translated: bool,
+        tbx_terms: dict | None = None,
     ) -> dict[str, Any]:
         return {
+            **({"tbx_terms": tbx_terms} if tbx_terms is not None else {}),
             "target": target,
             "state": state,
             "explanation": explanation,
@@ -975,6 +988,7 @@ class Unit(models.Model, LoggerMixin):
         if "disk_state" not in self.details:
             self.details["disk_state"] = self.get_disk_state(
                 target=self.old_unit["target"],
+                tbx_terms=self.old_unit.get("tbx_terms"),
                 state=self.old_unit["state"],
                 explanation=self.old_unit["explanation"],
                 automatically_translated=self.old_unit["automatically_translated"],
@@ -1220,7 +1234,13 @@ class Unit(models.Model, LoggerMixin):
         explanation,
         *,
         metadata_updates: dict[int, Unit] | None = None,
+        tbx_terms: dict | None = None,
     ) -> None:
+        source_terms = (
+            {"source": tbx_terms["source"], "target": tbx_terms["source"]}
+            if tbx_terms is not None
+            else None
+        )
         source_unit = component.get_source(
             self.id_hash,
             create={
@@ -1232,45 +1252,84 @@ class Unit(models.Model, LoggerMixin):
                 "location": location,
                 "explanation": explanation,
                 "flags": flags.format(),
+                "details": {"tbx_terms": deepcopy(source_terms)}
+                if source_terms is not None
+                else {},
             },
         )
         try:
             parsed_flags = Flags(source_unit.flags)
         except ParseException:
             parsed_flags = Flags()
+        disk_state = source_unit.details.get("disk_state")
+        disk_terms_changed = False
+        if source_terms is not None and disk_state is not None:
+            # Another language can refresh metadata while source edits are pending.
+            if source == disk_state["target"]:
+                from weblate.utils.terminology import reconcile_terms  # ruff: ignore[import-outside-top-level]
+
+                disk_terms_changed = disk_state.get("tbx_terms") != source_terms
+                disk_state["tbx_terms"] = deepcopy(source_terms)
+                records = reconcile_terms(
+                    source_terms["source"], split_plural(source_unit.source)
+                )
+                source_terms = {"source": records, "target": deepcopy(records)}
+                source = source_unit.source
+            if explanation == disk_state["explanation"]:
+                explanation = source_unit.explanation
+        same_source = source == source_unit.source
+        same_terms = (
+            source_unit.details.get("tbx_terms") == source_terms
+            and same_source
+            and not disk_terms_changed
+        )
         same_flags = flags == parsed_flags
         same_explanation = explanation == source_unit.explanation
         if (
             not source_unit.source_updated
             and not source_unit.translation.filename
             and (
-                pos != source_unit.position
+                not same_terms
+                or pos != source_unit.position
                 or location != source_unit.location
                 or not same_flags
                 or note != source_unit.note
                 or explanation != source_unit.explanation
             )
         ):
+            source_unit.source = source_unit.target = source
+            if source_terms is None:
+                source_unit.details.pop("tbx_terms", None)
+            else:
+                source_unit.details["tbx_terms"] = source_terms
             source_unit.position = pos
             source_unit.source_updated = True
             source_unit.location = location
             source_unit.explanation = explanation
             source_unit.flags = flags.format()
             source_unit.note = note
-            if same_flags and same_explanation and metadata_updates is not None:
+            if (
+                same_flags
+                and same_explanation
+                and same_source
+                and metadata_updates is not None
+            ):
                 metadata_updates[source_unit.pk] = source_unit
             else:
                 source_unit.save(
                     update_fields=[
+                        "source",
+                        "target",
+                        "details",
                         "position",
                         "location",
                         "explanation",
                         "flags",
                         "note",
                     ],
-                    same_content=True,
-                    run_checks=False,
-                    only_save=same_flags,
+                    same_content=same_source,
+                    run_checks=not same_source,
+                    only_save=same_flags and same_source,
                 )
         self.source_unit = source_unit
 
@@ -1329,6 +1388,7 @@ class Unit(models.Model, LoggerMixin):
         context = unit.context
         self.check_valid([context])
         return {
+            "tbx_terms": getattr(unit, "tbx_terms", None),
             "location": location,
             "explanation": explanation,
             "source_explanation": source_explanation,
@@ -1366,6 +1426,7 @@ class Unit(models.Model, LoggerMixin):
             msg = "store_unit_attributes has to be called first"
             raise ValueError(msg)
         unit_attributes = self.unit_attributes
+        tbx_terms = deepcopy(unit_attributes["tbx_terms"])
         location = unit_attributes["location"]
         explanation = unit_attributes["explanation"]
         source_explanation = unit_attributes["source_explanation"]
@@ -1398,6 +1459,7 @@ class Unit(models.Model, LoggerMixin):
                 flags,
                 source_explanation,
                 metadata_updates=metadata_updates,
+                tbx_terms=tbx_terms,
             )
 
         # Get comparison state (disk_state if exists, otherwise current state)
@@ -1461,7 +1523,9 @@ class Unit(models.Model, LoggerMixin):
         )
 
         same_metadata = (
-            location == self.location
+            tbx_terms
+            == comparison_state.get("tbx_terms", self.details.get("tbx_terms"))
+            and location == self.location
             and note == self.note
             and pos == self.position
             and automatically_translated == self.automatically_translated
@@ -1496,15 +1560,29 @@ class Unit(models.Model, LoggerMixin):
         if same_data and same_metadata:
             return
 
+        # Store imported terminology metadata without losing pending text edits.
+        if tbx_terms is None:
+            self.details.pop("tbx_terms", None)
+        else:
+            if same_data and "disk_state" in self.details:
+                from weblate.utils.terminology import reconcile_terms  # ruff: ignore[import-outside-top-level]
+
+                self.details["disk_state"]["tbx_terms"] = deepcopy(tbx_terms)
+                tbx_terms["target"] = reconcile_terms(
+                    tbx_terms["target"], split_plural(self.target)
+                )
+            self.details["tbx_terms"] = tbx_terms
         # Store updated values
         self.original_state = original_state
         self.position = pos
         self.location = location
-        self.explanation = explanation
+        if not same_data or not supports_explanation:
+            self.explanation = explanation
         self.flags = flags.format()
         self.source = source
-        self.target = target
-        self.state = state
+        if not same_data:
+            self.target = target
+            self.state = state
         self.context = context
         self.note = note
         self.previous_source = previous_source
@@ -1518,6 +1596,7 @@ class Unit(models.Model, LoggerMixin):
                 metadata_updates[self.pk] = self
             else:
                 update_fields = [
+                    "details",
                     "location",
                     "note",
                     "position",
@@ -1626,6 +1705,15 @@ class Unit(models.Model, LoggerMixin):
                 self.save(
                     same_content=True, run_checks=False, update_fields=["priority"]
                 )
+
+    @property
+    def tbx_terms(self) -> dict:
+        """Imported metadata aligned with the current alternatives."""
+        if "tbx_terms" not in self.details:
+            return {}
+        from weblate.utils.terminology import term_records  # ruff: ignore[import-outside-top-level]
+
+        return {"source": term_records(self, source=True), "target": term_records(self)}
 
     @cached_property
     def is_plural(self) -> bool:
@@ -1821,6 +1909,8 @@ class Unit(models.Model, LoggerMixin):
             "explanation",
             "automatically_translated",
         ]
+        if "tbx_terms" in self.details:
+            update_fields.append("details")
         if self.is_source and not self.translation.component.intermediate:
             self.source = self.target
             update_fields.extend(["source"])
@@ -2439,6 +2529,12 @@ class Unit(models.Model, LoggerMixin):
             new_target_list, self.fixups = fix_target(new_target_list, self)
 
         # Update unit and save it
+        if "tbx_terms" in self.details:
+            from weblate.utils.terminology import reconcile_terms  # ruff: ignore[import-outside-top-level]
+
+            self.details["tbx_terms"]["target"] = reconcile_terms(
+                self.details["tbx_terms"]["target"], new_target_list
+            )
         self.target = join_plural(new_target_list)
         not_empty = any(new_target_list)
 
@@ -2490,11 +2586,11 @@ class Unit(models.Model, LoggerMixin):
                 # if already saved update in DB else deferred via bulk create
                 if self.pending_unit_change.pk is not None:
                     self.pending_unit_change.save(update_fields=["state"])
-            elif saved:
-                # There should be a pending unit if saved
-                msg = "Updating unit, but pending unit change is not set!"
-                raise ValueError(msg)
             else:
+                if saved:
+                    # There should be a pending unit if saved
+                    msg = "Updating unit, but pending unit change is not set!"
+                    raise ValueError(msg)
                 # Generate pending unit change otherwise
                 PendingUnitChange.store_unit_change(unit=self, author=author)
                 # Indicate as saved

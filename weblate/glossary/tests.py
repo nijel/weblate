@@ -18,7 +18,11 @@ from django.db import transaction
 from django.urls import reverse
 from lxml import etree
 
-from weblate.glossary.models import get_glossary_terms, get_glossary_tsv
+from weblate.glossary.models import (
+    get_glossary_terms,
+    get_glossary_tsv,
+    get_glossary_tuples,
+)
 from weblate.glossary.tasks import (
     cleanup_stale_glossaries,
     get_stale_glossary_translations,
@@ -31,6 +35,7 @@ from weblate.trans.alerts.registry import update_alerts
 from weblate.trans.models import PendingUnitChange, Unit
 from weblate.trans.tests.test_views import ViewTestCase
 from weblate.trans.tests.utils import get_test_file
+from weblate.trans.util import join_plural
 from weblate.utils.hash import calculate_hash
 from weblate.utils.lock import WeblateLockTimeoutError
 from weblate.utils.state import STATE_READONLY, STATE_TRANSLATED
@@ -295,6 +300,26 @@ class GlossaryTest(ViewTestCase):
 
         # Check number of imported objects
         self.assertEqual(self.glossary.unit_set.count(), 164)
+
+    def test_multivalue_alias_lookup(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            self.add_term(
+                join_plural(["salutation", "hello"]), join_plural(["ahoj", "nazdar"])
+            )
+        unit = self.get_unit("Hello, world!\n")
+        matches = get_glossary_terms(unit)
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].matched_sources, ("hello",))
+        self.assertEqual(
+            [term["text"] for term in matches[0].glossary_targets], ["ahoj", "nazdar"]
+        )
+        self.assertEqual(list(get_glossary_tuples(matches)), [("hello", "ahoj")])
+        unit.source = "A salutation: hello"
+        unit.glossary_terms = None
+        matches = get_glossary_terms(unit)
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(set(matches[0].matched_sources or ()), {"salutation", "hello"})
+        self.assertEqual(len(matches[0].glossary_positions), 2)
 
     def test_get_terms(self) -> None:
         with self.captureOnCommitCallbacks(execute=True):

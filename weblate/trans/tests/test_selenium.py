@@ -1253,6 +1253,47 @@ class SeleniumTests(BaseLiveServerTestCase, RegistrationTestMixin, TempDirMixin)
             )
         )
 
+    def test_glossary_copy_uses_last_active_alternative(self) -> None:
+        fixture = RepoTestMixin()
+        fixture.clone_test_repos()
+        project = Project.objects.create(
+            name="Glossary copying", slug="glossary-copying"
+        )
+        component = fixture.create_po(project=project)
+        unit = component.translation_set.get(language_code="cs").unit_set.get(
+            source__contains="Orangutan"
+        )
+        self.do_login(superuser=True)
+        with self.wait_for_page_load():
+            self.driver.get(f"{self.live_server_url}{unit.get_absolute_url()}")
+        editors = self.driver.find_elements(
+            By.CSS_SELECTOR, ".translation-form .translation-editor"
+        )
+        self.assertEqual(len(editors), 3)
+        for editor in editors:
+            editor.clear()
+        button = self.driver.execute_script("""
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "glossary-copy";
+            button.dataset.glossaryText = "alternative";
+            button.textContent = "Copy alternative";
+            document.querySelector(".translation-form").append(button);
+            return button;
+        """)
+        editors[1].click()
+        button.send_keys(Keys.SPACE)
+        self.assertEqual(
+            [editor.get_attribute("value") for editor in editors],
+            ["", "alternative", ""],
+        )
+        editors[2].click()
+        button.click()
+        self.assertEqual(
+            [editor.get_attribute("value") for editor in editors],
+            ["", "alternative", "alternative"],
+        )
+
     def test_retained_translation_is_unsaved(self) -> None:
         """Retained plural drafts warn on navigation without further input."""
         fixture = RepoTestMixin()
